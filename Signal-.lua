@@ -1,11 +1,16 @@
+
 --[[
 	Signal- (aka SignalMinus)
 	Developed and made by JDJDMNNEN aka delphin4ik. (Huge thanks to BlueCritical)
 	Simple Signal Module.
 	ConnectionLikes fire in order.
+	Use :FireParallel() to fire ConnectionLikes out of order.
 	Module has 2 Classes, SignalClass - Main Signal Class, ConnectionLike - Connection Class.
 	SignalMinus is similar to RBXScriptSignal with it having simillar methods.
-	Distributed under MIT license
+	Change ErrorHandlerFunction is the error handler function. Change it if you want to change the error handler.
+	:Destroy() fully clears the Signal.
+	:Fire() is the most memmory efficient than :FireParallel(), but the latter doesnt yeild.
+	Distributed under MIT license.
 ]]
 
 const ErrorHandlerFunction = function(ErrorMSG)
@@ -69,6 +74,9 @@ export type SignalMinus<Params...> = {
 	Wait: typeof(
 		function(SignalClass:SignalMinus<Params...>): Params... end
 	),
+	DisconnectAll: typeof(
+		function(SignalClass:SignalMinus<Params...>): () end
+	),
 	Listeners: {[number]: (Params...) -> ()}
 }
 
@@ -76,9 +84,12 @@ function SignalClass:Destroy(): ()
 	table.clear(self)
 end
 
+function SignalClass:DisconnectAll(): ()
+	table.clear(self.Listeners)
+end
+
 function SignalClass:Fire(...:any): ()
 	local snapshot = table.clone(self.Listeners)
-	
 	for _, i in snapshot do
 		xpcall(i, ErrorHandlerFunction,...)
 	end
@@ -86,24 +97,18 @@ end
 
 function SignalClass:Connect(fn:(...any) -> ()): ConnectionLike
 	self.Len += 1
-
 	local Len = self.Len
-	
 	local signals = self.Listeners
 	local NewConnectionLike = {}
-	
 	signals[Len] = fn
-	
 	function NewConnectionLike:Disconnect(): ()
 		signals[Len] = nil
 	end
-	
 	return NewConnectionLike
 end
 
 function SignalClass:FireParallel(...:any): ()
 	local snapshot = table.clone(self.Listeners)
-	
 	for _, i in snapshot do
 		task.spawn(function(...)
 			xpcall(i, ErrorHandlerFunction, ...)
@@ -113,24 +118,20 @@ end
 
 function SignalClass:Once(fn:(...any) -> ()): ConnectionLike
 	local NewConnectionLike
-	
 	NewConnectionLike = self:Connect(function(...)
 		NewConnectionLike:Disconnect()
 		fn(...)
 	end)
-	
 	return NewConnectionLike
 end
 
 function SignalClass:Wait()
 	local NewConnectionLike
 	local Coroutine = coroutine.running()
-	
 	NewConnectionLike = self:Connect(function(...)
 		NewConnectionLike:Disconnect()
 		coroutine.resume(Coroutine, ...)
 	end)
-	
 	return coroutine.yield(Coroutine)
 end
 
