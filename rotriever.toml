@@ -1,8 +1,0 @@
-[package]
-name = "Signal-"
-version = "0.4"
-license = "MIT"
-authors = [ "JDJDMNNEN" ]
-content_root = "src"
-
-[dependencies]
