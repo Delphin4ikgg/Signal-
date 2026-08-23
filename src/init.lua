@@ -1,3 +1,4 @@
+--!strict
 --!native
 --!optimize 2
 --[[
@@ -5,14 +6,56 @@
 	Developed and made by JDJDMNNEN aka delphin4ik. (Huge thanks to BlueCritical)
 	Distributed under MIT license.
 	
-	Also thanks to LemonSignal and GoodSignal. He Signal module is heavily based off of them.
+	Also thanks to LemonSignal and GoodSignal. The Signal module is heavily based off of them.
+	
+	Fires Oldest-First, Latest-Last
+	
+	API:
+	local Signal = require(PathToSignalModule)
+	
+	local newSignal = Signal() or Signal.new() :: Signal.Signal<string>
+	
+	local connection = newSignal:Connect(function(a0:string)
+		print("Hello Signal-! ", a0)
+	end)
+	
+	newSignal:Fire("You too!") -> "Hello Signal-! You too!"
+	
+	connection:Disconnect() or conenction:Destroy()
+	
+	Short Docs:
+	
+	To create a new Signal, either call the Module, or use the .new() function. You can specify types in the constructor function.
+	
+	[Required Module].Is() - Returns a boolean. If true, the object is likely a signal.
+	
+	Signal:Len() - Returns the number of connected connections.
+	
+	Signal:Fire() - Dispatches the connections. Yield-Safe.
+	Signal:FireDeferred() - Same as Fire, but deferred.
+	
+	Signal:Connect() - New Connection.
+	Signal:Once() - Same as Connect, but auto-disconnects on the first fire.
+	Signal:Wait() - Yields until the signal is fired, after that either passes the values specified by the Fire, or a string as a return on error.
+	
+	Signal:GetConnections() - Returns all the connected connetions.
+	
+	Signal:Destroy() - Destroyes the signal.
+	Signal:DisconnectAll() - Disconnect everything. If you used .Wrap() for the creation of the signal, you will have to fire it mannually after using the fn.
+	
+	All of the Connection functions except Wait return a ConnectionLike class.
+	
+	ConnectionLike:Disconnect() - Disconnects the connection.
+	ConnectionLike:Reconnect() - Reconnects the connection, appending it to the end.
+	ConnectionLike:Destroy() - Alias for :Disconnect()
+	ConnectionLike.Connected - Treat this as read-only. Determines if the function is Connected.
 ]]
 
 local SignalClass = {}
 SignalClass.__index = SignalClass
 
-local function Constructor<Params...>(_, ...: Params...): SignalMinus<Params...>
-	return setmetatable({_head = false, _destroyed = false, _tail = false, _rbxCon = false}, SignalClass)
+local function Constructor<Params...>(...: Params...): Signal<Params...>
+	return setmetatable({_head = false, _destroyed = false, _tail = false, _rbxCon = false, _len = 0}, SignalClass)
 end
 
 export type ConnectionLike = {
@@ -22,28 +65,31 @@ export type ConnectionLike = {
 	Destroy: (self:ConnectionLike) -> (),
 }
 
-export type SignalMinus<Params...> = {
+export type Signal<Params...> = {
 	Fire: typeof(
-		function(SignalClass:SignalMinus<Params...>, ... : Params...): () end
+		function(SignalClass:Signal<Params...>, ... : Params...): () end
 	),
 	Destroy: typeof(
-		function(SignalClass:SignalMinus<Params...>): () end
+		function(SignalClass:Signal<Params...>): () end
 	), 
 	Connect: typeof(
-		function(SignalClass:SignalMinus<Params...>,Connection:(Params...)->()) : ConnectionLike end
+		function(SignalClass:Signal<Params...>,Connection:(Params...)->()) : ConnectionLike end
 	), 
 	FireDeferred: typeof(
-		function(SignalClass:SignalMinus<Params...>, ... : Params...) : () end
+		function(SignalClass:Signal<Params...>, ... : Params...) : () end
 	), 
 	Once: typeof(
-		function(SignalClass:SignalMinus<Params...>,Connection:(Params...)->()): ConnectionLike end
+		function(SignalClass:Signal<Params...>,Connection:(Params...)->()): ConnectionLike end
 	),
 	Wait: typeof(
-		function(SignalClass:SignalMinus<Params...>): Params... end
+		function(SignalClass:Signal<Params...>): Params... end
 	),
 	DisconnectAll: typeof(
-		function(SignalClass:SignalMinus<Params...>): () end
+		function(SignalClass:Signal<Params...>): () end
 	),
+	GetConnections: typeof(
+		function(SignalClass:Signal<Params...>): {ConnectionLike} | {} end
+	)
 }
 
 local freeThreads: { thread } = {}
@@ -63,7 +109,7 @@ end
 local ConnectionLikeClass = {}
 ConnectionLikeClass.__index = ConnectionLikeClass
 -- An evil wizard that creates a new "carcas" for his EVIL ConnectionLike!
-local function newConnection<T...>(Signal:SignalMinus<T...>, fn:(T...) -> ()): ConnectionLike
+local function newConnection<T...>(Signal:Signal<T...>, fn:(T...) -> ()): ConnectionLike
 	return setmetatable({
 		Connected = true,
 		_signal = Signal,
@@ -88,6 +134,8 @@ function ConnectionLikeClass:Disconnect()
 	
 	if signal._head == self then signal._head = next end
 	if signal._tail == self then signal._tail = prev end
+	
+	signal._len -= 1
 end
 
 function ConnectionLikeClass:Reconnect()
@@ -104,15 +152,17 @@ function ConnectionLikeClass:Reconnect()
 	local signal = self._signal
 	
 	if signal._tail then
-		signal._tail._next = self
 		self._prev = signal._tail
+		signal._tail._next = self
 	else
 		signal._head = self
 		self._prev = false
 	end
 	
+	signal._tail = self
 	self._next = false
-	self._signal._tail = self
+	
+	signal._len += 1
 end
 -- Alias for :Disconnect()
 ConnectionLikeClass.Destroy = ConnectionLikeClass.Disconnect
@@ -127,7 +177,7 @@ function SignalClass:Destroy(): ()
 		self._rbxCon:Disconnect()
 	end
 	
-	self._rbxCon = nil
+	self._rbxCon = false
 	
 	while currentSignal do
 		if currentSignal._waitingThread then
@@ -137,25 +187,22 @@ function SignalClass:Destroy(): ()
 		nextSignal = currentSignal._next
 		
 		currentSignal.Connected = false
-		currentSignal._function = nil
-		currentSignal._signal = nil
+		currentSignal._function = false
+		currentSignal._signal = false
 		
 		currentSignal = nextSignal
 	end
 	
-	self._head = nil
-	self._tail = nil
+	self._head = false
+	self._tail = false
+	
+	self._len = 0
 end
 
 function SignalClass:DisconnectAll(): ()
 	if self._destroyed then 
 		error("Signal-: Signal has been destroyed!", 2)
 	end
-	
-	if self._rbxCon then
-		self._rbxCon:Disconnect()
-	end
-	self._rbxCon = false
 
 	local currentSignal = self._head
 	
@@ -169,6 +216,8 @@ function SignalClass:DisconnectAll(): ()
 	
 	self._head = false
 	self._tail = false
+	
+	self._len = 0
 end
 
 function SignalClass:Fire(...): ()
@@ -177,10 +226,9 @@ function SignalClass:Fire(...): ()
 	end
 	
 	local currentConnection = self._head
-	local stopMarker = self._tail
+	local currentThread
 	
 	while currentConnection do
-		local currentThread
 		if currentConnection.Connected then
 			if #freeThreads > 0 then
 				currentThread = freeThreads[#freeThreads]
@@ -193,9 +241,27 @@ function SignalClass:Fire(...): ()
 			task.spawn(currentThread, currentConnection._function, ...)
 			
 		end
-		if currentConnection == stopMarker then return end
 		currentConnection = currentConnection._next
 	end
+end
+
+function SignalClass:GetConnections(): {ConnectionLike}
+	if self._destroyed then 
+		error("Signal-: Signal has been destroyed!", 2)
+	end
+
+	local currentConnection = self._head
+	
+	local returntable = {}
+
+	while currentConnection do
+		if currentConnection.Connected then
+			returntable[#returntable + 1] = currentConnection
+		end
+		currentConnection = currentConnection._next
+	end
+	
+	return returntable
 end
 
 function SignalClass:FireDeferred(...): ()
@@ -223,6 +289,8 @@ function SignalClass:Connect(fn:(...any) -> ()): ConnectionLike
 	end
 	
 	self._tail = ConnectionLike
+	
+	self._len += 1
 	
 	return ConnectionLike
 end
@@ -256,12 +324,20 @@ function SignalClass:Wait()
 	return coroutine.yield()
 end
 
-local function wrap(InitialSignal:RBXScriptSignal): SignalMinus<>
+local function wrap<T...>(InitialSignal:RBXScriptSignal): Signal<T...>
 	local newSignal = Constructor()
 	newSignal._rbxCon = InitialSignal:Connect(function(...) 
 		newSignal:Fire(...)
 	end)
 	return newSignal
+end
+
+function SignalClass:Len()
+	return self._len
+end
+
+local function is(obj:any)
+	return obj and obj._len ~= nil and obj._rbxCon ~= nil
 end
 
 setmetatable(ConnectionLikeClass, {
@@ -282,4 +358,6 @@ setmetatable(SignalClass, {
 	end,
 })
 
-return setmetatable({Wrap = wrap, new = Constructor}, {__call = Constructor})
+return setmetatable({Wrap = wrap, new = Constructor, Is = is}, {__call = function<T...>(_, ...:T...): Signal<T...>
+	return Constructor(...)
+end,})
