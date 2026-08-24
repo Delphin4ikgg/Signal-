@@ -91,7 +91,10 @@ export type Signal<Params...> = {
 	),
 	GetConnections: typeof(
 		function(SignalClass:Signal<Params...>): {ConnectionLike} | {} end
-	)
+	),
+	Len: typeof(
+		function(SignalClass:Signal<Params...>): number end
+	),
 }
 
 local freeThreads: { thread } = {}
