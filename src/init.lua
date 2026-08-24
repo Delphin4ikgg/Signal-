@@ -174,7 +174,7 @@ end
 function ConnectionLikeClass:Destroy(): ()
 	self._destroyed = true
 	
-	ConnectionLikeClass:Disconnect()
+	self:Disconnect()
 end
 
 function SignalClass:Destroy(): ()
@@ -347,7 +347,7 @@ function SignalClass:Len()
 end
 
 local function is(obj:any)
-	return obj and obj._marker == UNIVERSAL_MARKER
+	return type(obj) == "table" and rawget(obj, _marker) == UNIVERSAL_MARKER
 end
 
 setmetatable(ConnectionLikeClass, {
