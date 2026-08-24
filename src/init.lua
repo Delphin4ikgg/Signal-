@@ -21,7 +21,7 @@
 	
 	newSignal:Fire("You too!") -> "Hello Signal-! You too!"
 	
-	connection:Disconnect() or conenction:Destroy()
+	connection:Disconnect() or connection:Destroy()
 	
 	Short Docs:
 	
@@ -35,19 +35,20 @@
 	Signal:FireDeferred() - Same as Fire, but deferred.
 	
 	Signal:Connect() - New Connection.
+	Signal:ConnectPriority() - New Connection, but it is always appended to the start, meaning it will be fired first unless you override it.
 	Signal:Once() - Same as Connect, but auto-disconnects on the first fire.
 	Signal:Wait() - Yields until the signal is fired, after that either passes the values specified by the Fire, or a string as a return on error.
 	
 	Signal:GetConnections() - Returns all the connected connetions.
 	
-	Signal:Destroy() - Destroyes the signal.
+	Signal:Destroy() - Destroys the signal.
 	Signal:DisconnectAll() - Disconnect everything. Ignores RBXScriptConnections if you used Wrap to create the signal.
 	
 	All of the Connection functions except Wait return a ConnectionLike class.
 	
 	ConnectionLike:Disconnect() - Disconnects the connection.
 	ConnectionLike:Reconnect() - Reconnects the connection, appending it to the end.
-	ConnectionLike:Destroy() - Alias for :Disconnect()
+	ConnectionLike:Destroy() - Same as Disconnect, but disables reconnects.
 	ConnectionLike.Connected - Treat this as read-only. Determines if the function is Connected.
 ]]
 
@@ -56,16 +57,9 @@ local UNIVERSAL_MARKER = {}
 local SignalClass = {}
 SignalClass.__index = SignalClass
 
-local function Constructor<Params...>(...: Params...): Signal<Params...>
+local function Constructor<T...>(...:T...): Signal<T...>
 	return setmetatable({_head = false, _destroyed = false, _tail = false, _rbxCon = false, _len = 0, _marker = UNIVERSAL_MARKER}, SignalClass)
 end
-
-export type ConnectionLike = {
-	Connected:boolean,
-	Disconnect: (self:ConnectionLike) -> (),
-	Reconnect: (self:ConnectionLike) -> (),
-	Destroy: (self:ConnectionLike) -> (),
-}
 
 export type Signal<Params...> = {
 	Fire: typeof(
@@ -76,7 +70,10 @@ export type Signal<Params...> = {
 	), 
 	Connect: typeof(
 		function(SignalClass:Signal<Params...>,Connection:(Params...)->()) : ConnectionLike end
-	), 
+	),
+	ConnectPriority: typeof(
+		function(SignalClass:Signal<Params...>,Connection:(Params...)->()) : ConnectionLike end
+	),
 	FireDeferred: typeof(
 		function(SignalClass:Signal<Params...>, ... : Params...) : () end
 	), 
@@ -95,6 +92,13 @@ export type Signal<Params...> = {
 	Len: typeof(
 		function(SignalClass:Signal<Params...>): number end
 	),
+}
+
+export type ConnectionLike = {
+	Connected:boolean,
+	Disconnect: (self:ConnectionLike) -> (),
+	Reconnect: (self:ConnectionLike) -> (),
+	Destroy: (self:ConnectionLike) -> (),
 }
 
 local freeThreads: { thread } = {}
@@ -197,8 +201,8 @@ function SignalClass:Destroy(): ()
 		nextSignal = currentSignal._next
 		
 		currentSignal.Connected = false
-		currentSignal._function = false
-		currentSignal._signal = false
+		currentSignal._function = nil
+		currentSignal._signal = nil
 		
 		currentSignal = nextSignal
 	end
@@ -218,7 +222,7 @@ function SignalClass:DisconnectAll(): ()
 	
 	while currentSignal do
 		if currentSignal._waitingThread then
-			task.spawn(currentSignal._waitingThread, "Signal-: Signal was disconnected.")
+			task.spawn(currentSignal._waitingThread, "Signal- -> ConnectionLike: Connection was disconnected")
 		end
 		currentSignal:Disconnect()
 		currentSignal = currentSignal._next
@@ -302,6 +306,28 @@ function SignalClass:Connect(fn:(...any) -> ()): ConnectionLike
 	
 	self._len += 1
 	
+	return ConnectionLike
+end
+
+function SignalClass:ConnectPriority(fn:(...any) -> ()): ConnectionLike
+	if self._destroyed then
+		error("Signal-: Signal has been destroyed!", 2)
+		return 
+	end
+
+	local ConnectionLike = newConnection(self, fn)
+
+	if self._head then
+		self._head._prev = ConnectionLike
+		ConnectionLike._next = self._head
+		self._head = ConnectionLike
+	else
+		self._head = ConnectionLike
+		self._tail = ConnectionLike
+	end
+
+	self._len += 1
+
 	return ConnectionLike
 end
 
