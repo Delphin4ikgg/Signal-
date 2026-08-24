@@ -49,7 +49,7 @@
 	ConnectionLike:Disconnect() - Disconnects the connection.
 	ConnectionLike:Reconnect() - Reconnects the connection, appending it to the end.
 	ConnectionLike:Destroy() - Same as Disconnect, but disables reconnects.
-	ConnectionLike.Connected - Treat this as read-only. Determines if the function is Connected.
+	ConnectionLike.Connected - Treat this as read-only, but don't mess with it as it is not. Determines if the function is Connected.
 ]]
 
 local UNIVERSAL_MARKER = {}
@@ -87,7 +87,7 @@ export type Signal<Params...> = {
 		function(SignalClass:Signal<Params...>): () end
 	),
 	GetConnections: typeof(
-		function(SignalClass:Signal<Params...>): {ConnectionLike} | {} end
+		function(SignalClass:Signal<Params...>): {ConnectionLike} end
 	),
 	Len: typeof(
 		function(SignalClass:Signal<Params...>): number end
@@ -207,8 +207,8 @@ function SignalClass:Destroy(): ()
 		currentSignal = nextSignal
 	end
 	
-	self._head = false
-	self._tail = false
+	self._head = nil
+	self._tail = nil
 	
 	self._len = 0
 end
@@ -241,6 +241,7 @@ function SignalClass:Fire(...): ()
 	
 	local currentConnection = self._head
 	local currentThread
+	const _stopMarker = self._tail
 	
 	while currentConnection do
 		if currentConnection.Connected then
@@ -255,6 +256,7 @@ function SignalClass:Fire(...): ()
 			task.spawn(currentThread, currentConnection._function, ...)
 			
 		end
+		if currentConnection == _stopMarker then break end
 		currentConnection = currentConnection._next
 	end
 end
@@ -394,6 +396,9 @@ setmetatable(SignalClass, {
 	end,
 })
 
+return setmetatable({Wrap = wrap, new = Constructor, Is = is}, {__call = function<T...>(_, ...:T...): Signal<T...>
+	return Constructor(...)
+end,})
 return setmetatable({Wrap = wrap, new = Constructor, Is = is}, {__call = function<T...>(_, ...:T...): Signal<T...>
 	return Constructor(...)
 end,})
