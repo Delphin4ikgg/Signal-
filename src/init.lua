@@ -347,7 +347,7 @@ function SignalClass:Len()
 end
 
 local function is(obj:any)
-	return type(obj) == "table" and rawget(obj, _marker) == UNIVERSAL_MARKER
+	return type(obj) == "table" and rawget(obj, "_marker") == UNIVERSAL_MARKER
 end
 
 setmetatable(ConnectionLikeClass, {
