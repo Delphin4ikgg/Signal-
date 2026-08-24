@@ -41,7 +41,7 @@
 	Signal:GetConnections() - Returns all the connected connetions.
 	
 	Signal:Destroy() - Destroyes the signal.
-	Signal:DisconnectAll() - Disconnect everything. If you used .Wrap() for the creation of the signal, you will have to fire it mannually after using the fn.
+	Signal:DisconnectAll() - Disconnect everything. Ignores RBXScriptConnections if you used Wrap to create the signal.
 	
 	All of the Connection functions except Wait return a ConnectionLike class.
 	
