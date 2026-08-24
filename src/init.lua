@@ -171,20 +171,7 @@ end
 function ConnectionLikeClass:Destroy(): ()
 	self._destroyed = true
 	
-	local signal = self._signal
-
-	self.Connected = false
-
-	local next = self._next
-	local prev = self._prev
-
-	if next then next._prev = prev end
-	if prev then prev._next = next end
-
-	if signal._head == self then signal._head = next end
-	if signal._tail == self then signal._tail = prev end
-
-	signal._len -= 1
+	ConnectionLikeClass:Disconnect()
 end
 
 function SignalClass:Destroy(): ()
