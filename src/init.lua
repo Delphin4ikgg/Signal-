@@ -51,11 +51,13 @@
 	ConnectionLike.Connected - Treat this as read-only. Determines if the function is Connected.
 ]]
 
+local UNIVERSAL_MARKER = {}
+
 local SignalClass = {}
 SignalClass.__index = SignalClass
 
 local function Constructor<Params...>(...: Params...): Signal<Params...>
-	return setmetatable({_head = false, _destroyed = false, _tail = false, _rbxCon = false, _len = 0}, SignalClass)
+	return setmetatable({_head = false, _destroyed = false, _tail = false, _rbxCon = false, _len = 0, _marker = UNIVERSAL_MARKER}, SignalClass)
 end
 
 export type ConnectionLike = {
@@ -117,6 +119,7 @@ local function newConnection<T...>(Signal:Signal<T...>, fn:(T...) -> ()): Connec
 		_next = false,
 		_waitingThread = false,
 		_prev = false,
+		_destroyed = false
 	}, ConnectionLikeClass)
 end
 
@@ -139,7 +142,7 @@ function ConnectionLikeClass:Disconnect()
 end
 
 function ConnectionLikeClass:Reconnect()
-	if not self._signal or self._signal._destroyed then 
+	if not self._signal or self._signal._destroyed or self._destroyed then 
 		error("Signal-: Signal has been destroyed!", 2)
 	end
 	
@@ -164,8 +167,25 @@ function ConnectionLikeClass:Reconnect()
 	
 	signal._len += 1
 end
--- Alias for :Disconnect()
-ConnectionLikeClass.Destroy = ConnectionLikeClass.Disconnect
+
+function ConnectionLikeClass:Destroy(): ()
+	self._destroyed = true
+	
+	local signal = self._signal
+
+	self.Connected = false
+
+	local next = self._next
+	local prev = self._prev
+
+	if next then next._prev = prev end
+	if prev then prev._next = next end
+
+	if signal._head == self then signal._head = next end
+	if signal._tail == self then signal._tail = prev end
+
+	signal._len -= 1
+end
 
 function SignalClass:Destroy(): ()
 	self._destroyed = true
@@ -337,7 +357,7 @@ function SignalClass:Len()
 end
 
 local function is(obj:any)
-	return obj and obj._len ~= nil and obj._rbxCon ~= nil
+	return obj and obj._marker == UNIVERSAL_MARKER
 end
 
 setmetatable(ConnectionLikeClass, {
