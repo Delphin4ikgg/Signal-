@@ -1,10 +1,10 @@
---!strict
---!native
 --!optimize 2
+--!native
 --[[
 	Signal- (aka SignalMinus)
 	Developed and made by JDJDMNNEN aka delphin4ik. (Huge thanks to BlueCritical)
 	Distributed under MIT license.
+	v1.0
 	
 	Also thanks to LemonSignal and GoodSignal. The Signal module is heavily based off of them.
 	
@@ -51,6 +51,8 @@
 	ConnectionLike:Destroy() - Same as Disconnect, but disables reconnects.
 	ConnectionLike.Connected - Treat this as read-only, but don't mess with it as it is not. Determines if the function is Connected.
 ]]
+
+const Wake_Waiters_On_Signal_Destroy = true
 
 local UNIVERSAL_MARKER = {}
 
@@ -101,17 +103,25 @@ export type ConnectionLike = {
 	Destroy: (self:ConnectionLike) -> (),
 }
 
+local freeRunnerThread: thread?
 local freeThreads: { thread } = {}
--- Coroutine Magic sounds funny thats why its named like that
-local function coroutineMagic(callback, ...)
-	callback(...)
-	local now = coroutine.running()
-	table.insert(freeThreads, now)
+
+local function run(fn, ...)
+	freeRunnerThread = nil
+	fn(...)
+	
+	local runner = coroutine.running()
+	
+	if freeRunnerThread then
+		freeThreads[#freeThreads + 1] = runner
+	else
+		freeRunnerThread = runner
+	end
 end
 
 local function Yield()
 	while true do
-		coroutineMagic(coroutine.yield())
+		run(coroutine.yield())
 	end
 end
 
@@ -132,35 +142,35 @@ end
 
 function ConnectionLikeClass:Disconnect()
 	if not self.Connected then return end
-	local signal = self._signal
 	
 	self.Connected = false
-	
+	local signal = self._signal
+
 	local next = self._next
 	local prev = self._prev
-	
+
 	if next then next._prev = prev end
 	if prev then prev._next = next end
-	
+
 	if signal._head == self then signal._head = next end
 	if signal._tail == self then signal._tail = prev end
-	
+
 	signal._len -= 1
 end
 
 function ConnectionLikeClass:Reconnect()
 	if not self._signal or self._signal._destroyed or self._destroyed then 
-		error("Signal-: Signal has been destroyed!", 2)
+		error("Signal- -> ConnectionLike: Signal has been destroyed!", 2)
 	end
-	
+
 	if self.Connected then
 		return
 	end
-	
+
 	self.Connected = true
-	
+
 	local signal = self._signal
-	
+
 	if signal._tail then
 		self._prev = signal._tail
 		signal._tail._next = self
@@ -168,93 +178,143 @@ function ConnectionLikeClass:Reconnect()
 		signal._head = self
 		self._prev = false
 	end
-	
+
 	signal._tail = self
 	self._next = false
-	
+
 	signal._len += 1
 end
 
 function ConnectionLikeClass:Destroy(): ()
 	self._destroyed = true
-	
+
 	self:Disconnect()
 end
 
-function SignalClass:Destroy(): ()
-	self._destroyed = true
-	
-	local currentSignal = self._head
-	local nextSignal
-	
-	if self._rbxCon then
-		self._rbxCon:Disconnect()
-	end
-	
-	self._rbxCon = false
-	
-	while currentSignal do
-		if currentSignal._waitingThread then
-			task.spawn(currentSignal._waitingThread, "Signal-: Signal was destroyed.")
+if Wake_Waiters_On_Signal_Destroy then 
+	SignalClass.DisconnectAll = function(self:Signal<...any>): ()
+		if self._destroyed then 
+			error("Signal-: Signal has been destroyed!", 2)
 		end
-		
-		nextSignal = currentSignal._next
-		
-		currentSignal.Connected = false
-		currentSignal._function = nil
-		currentSignal._signal = nil
-		
-		currentSignal = nextSignal
-	end
-	
-	self._head = nil
-	self._tail = nil
-	
-	self._len = 0
-end
 
-function SignalClass:DisconnectAll(): ()
-	if self._destroyed then 
-		error("Signal-: Signal has been destroyed!", 2)
-	end
-
-	local currentSignal = self._head
-	
-	while currentSignal do
-		if currentSignal._waitingThread then
-			task.spawn(currentSignal._waitingThread, "Signal- -> ConnectionLike: Connection was disconnected")
+		local currentSignal = self._head
+		
+		while currentSignal do
+			if currentSignal._waitingThread then
+				task.spawn(currentSignal._waitingThread, "Signal-: Signal was destroyed.")
+			end
+			currentSignal:Disconnect()
+			currentSignal = currentSignal._next
 		end
-		currentSignal:Disconnect()
-		currentSignal = currentSignal._next
+
+		self._head = false
+		self._tail = false
+
+		self._len = 0
 	end
-	
-	self._head = false
-	self._tail = false
-	
-	self._len = 0
+	SignalClass.Destroy = function(self:Signal<...any>): ()
+		self._destroyed = true
+
+		local currentSignal = self._head
+
+		if self._rbxCon then
+			self._rbxCon:Disconnect()
+		end
+
+		self._rbxCon = false
+
+		self._head = nil
+		self._tail = nil
+
+		while currentSignal do
+			if currentSignal._waitingThread then
+				task.spawn(currentSignal._waitingThread, "Signal-: Signal was destroyed.")
+			end
+
+			currentSignal.Connected = false
+			currentSignal._function = nil
+			currentSignal._signal = nil
+
+			currentSignal = currentSignal._next
+		end
+
+		self._len = 0
+	end
+else
+	SignalClass.DisconnectAll = function(self:Signal<...any>): ()
+		if self._destroyed then 
+			error("Signal-: Signal has been destroyed!", 2)
+		end
+
+		local currentSignal = self._head
+
+		while currentSignal do
+			currentSignal:Disconnect()
+			currentSignal = currentSignal._next
+		end
+
+		self._head = false
+		self._tail = false
+
+		self._len = 0
+	end
+	SignalClass.Destroy = function(self:Signal<...any>): ()
+		self._destroyed = true
+
+		local currentSignal = self._head
+
+		if self._rbxCon then
+			self._rbxCon:Disconnect()
+		end
+
+		self._rbxCon = false
+
+		self._head = nil
+		self._tail = nil
+
+		while currentSignal do
+			currentSignal.Connected = false
+			currentSignal._function = nil
+			currentSignal._signal = nil
+
+			currentSignal = currentSignal._next
+		end
+
+		self._len = 0
+	end
 end
 
 function SignalClass:Fire(...): ()
 	if self._destroyed then 
 		error("Signal-: Signal has been destroyed!", 2)
 	end
-	
-	local currentConnection = self._head
-	local currentThread
-	const _stopMarker = self._tail
-	
+
+	local currentConnection: ConnectionLike? = self._head
+	local currentThread: thread
+	local currentFunction: typeof(function() end)
+	local len: number
+	const _stopMarker: ConnectionLike? = self._tail
+
 	while currentConnection do
 		if currentConnection.Connected then
-			if #freeThreads > 0 then
-				currentThread = freeThreads[#freeThreads]
-				freeThreads[#freeThreads] = nil
+			currentThread = freeRunnerThread
+			currentFunction = currentConnection._function
+			
+			if currentThread then
+				freeRunnerThread = nil
 			else
-				currentThread = coroutine.create(Yield)
-				coroutine.resume(currentThread)
+				len = #freeThreads
+				
+				if len > 0 then
+					currentThread = freeThreads[len]
+					freeThreads[len] = nil
+				else
+					currentThread = coroutine.create(Yield)
+					coroutine.resume(currentThread)
+				end
 			end
 			
-			task.spawn(currentThread, currentConnection._function, ...)
-			
+			task.spawn(currentThread, currentFunction, ...)
 		end
 		if currentConnection == _stopMarker then break end
 		currentConnection = currentConnection._next
@@ -267,7 +327,7 @@ function SignalClass:GetConnections(): {ConnectionLike}
 	end
 
 	local currentConnection = self._head
-	
+
 	local returntable = {}
 
 	while currentConnection do
@@ -276,7 +336,7 @@ function SignalClass:GetConnections(): {ConnectionLike}
 		end
 		currentConnection = currentConnection._next
 	end
-	
+
 	return returntable
 end
 
@@ -294,20 +354,20 @@ function SignalClass:Connect(fn:(...any) -> ()): ConnectionLike
 		error("Signal-: Signal has been destroyed!", 2)
 		return 
 	end
-	
+
 	local ConnectionLike = newConnection(self, fn)
-	
+
 	if self._tail then
 		self._tail._next = ConnectionLike
 		ConnectionLike._prev = self._tail
 	else
 		self._head = ConnectionLike
 	end
-	
+
 	self._tail = ConnectionLike
-	
+
 	self._len += 1
-	
+
 	return ConnectionLike
 end
 
@@ -335,30 +395,30 @@ end
 
 function SignalClass:Once(fn:(...any) -> ()): ConnectionLike
 	local NewConnectionLike
-	
+
 	NewConnectionLike = self:Connect(function(...)
 		if NewConnectionLike.Connected then
 			NewConnectionLike:Disconnect()
 			fn(...)
 		end
 	end)
-	
+
 	return NewConnectionLike
 end
 
 function SignalClass:Wait()
 	local NewConnectionLike
 	local Coroutine = coroutine.running()
-	
+
 	NewConnectionLike = self:Connect(function(...)
 		NewConnectionLike:Disconnect()
 		if coroutine.status(Coroutine) == "suspended" then
 			task.spawn(Coroutine, ...)
 		end
 	end)
-	
+
 	NewConnectionLike._waitingThread = Coroutine
-	
+
 	return coroutine.yield()
 end
 
@@ -396,9 +456,6 @@ setmetatable(SignalClass, {
 	end,
 })
 
-return setmetatable({Wrap = wrap, new = Constructor, Is = is}, {__call = function<T...>(_, ...:T...): Signal<T...>
-	return Constructor(...)
-end,})
 return setmetatable({Wrap = wrap, new = Constructor, Is = is}, {__call = function<T...>(_, ...:T...): Signal<T...>
 	return Constructor(...)
 end,})
