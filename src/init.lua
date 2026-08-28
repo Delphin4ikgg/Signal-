@@ -4,7 +4,7 @@
 	Signal- (aka SignalMinus)
 	Developed and made by JDJDMNNEN aka delphin4ik. (Huge thanks to BlueCritical)
 	Distributed under MIT license.
-	v1.0
+	v1.1
 	
 	Also thanks to LemonSignal and GoodSignal. The Signal module is heavily based off of them.
 	
@@ -54,7 +54,7 @@
 
 const Wake_Waiters_On_Signal_Destroy = true
 
-local UNIVERSAL_MARKER = {}
+local UNIVERSAL_MARKER = newproxy(false)
 
 local SignalClass = {}
 SignalClass.__index = SignalClass
@@ -107,7 +107,6 @@ local freeRunnerThread: thread?
 local freeThreads: { thread } = {}
 
 local function run(fn, ...)
-	freeRunnerThread = nil
 	fn(...)
 	
 	local runner = coroutine.running()
@@ -154,7 +153,7 @@ function ConnectionLikeClass:Disconnect()
 
 	if signal._head == self then signal._head = next end
 	if signal._tail == self then signal._tail = prev end
-
+	
 	signal._len -= 1
 end
 
@@ -189,6 +188,9 @@ function ConnectionLikeClass:Destroy(): ()
 	self._destroyed = true
 
 	self:Disconnect()
+	
+	self._signal = nil
+	self._function = nil
 end
 
 if Wake_Waiters_On_Signal_Destroy then 
@@ -223,8 +225,8 @@ if Wake_Waiters_On_Signal_Destroy then
 
 		self._rbxCon = false
 
-		self._head = nil
-		self._tail = nil
+		self._head = false
+		self._tail = false
 
 		while currentSignal do
 			if currentSignal._waitingThread then
@@ -269,8 +271,8 @@ else
 
 		self._rbxCon = false
 
-		self._head = nil
-		self._tail = nil
+		self._head = false
+		self._tail = false
 
 		while currentSignal do
 			currentSignal.Connected = false
@@ -328,7 +330,7 @@ function SignalClass:GetConnections(): {ConnectionLike}
 
 	local currentConnection = self._head
 
-	local returntable = {}
+	local returntable = table.create(self._len)
 
 	while currentConnection do
 		if currentConnection.Connected then
@@ -413,10 +415,11 @@ function SignalClass:Wait()
 	NewConnectionLike = self:Connect(function(...)
 		NewConnectionLike:Disconnect()
 		if coroutine.status(Coroutine) == "suspended" then
+			NewConnectionLike._waitingThread = nil
 			task.spawn(Coroutine, ...)
 		end
 	end)
-
+	
 	NewConnectionLike._waitingThread = Coroutine
 
 	return coroutine.yield()
@@ -430,7 +433,11 @@ local function wrap<T...>(InitialSignal:RBXScriptSignal): Signal<T...>
 	return newSignal
 end
 
-function SignalClass:Len()
+function SignalClass:Len(): number
+	return self._len
+end
+
+function SignalClass:__len(): number
 	return self._len
 end
 
