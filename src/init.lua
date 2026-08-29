@@ -6,6 +6,8 @@
 	Distributed under MIT license.
 	v1.1
 	
+	Check out the github page for the full docs and the newest version of the module!
+	
 	Also thanks to LemonSignal and GoodSignal. The Signal module is heavily based off of them.
 	
 	Fires Oldest-First, Latest-Last
