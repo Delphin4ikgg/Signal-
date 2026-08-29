@@ -4,7 +4,7 @@
 	Signal- (aka SignalMinus)
 	Developed and made by JDJDMNNEN aka delphin4ik. (Huge thanks to BlueCritical)
 	Distributed under MIT license.
-	v1.1
+	v1.2
 	
 	Check out the github page for the full docs and the newest version of the module!
 	
