@@ -203,7 +203,7 @@ if Wake_Waiters_On_Signal_Destroy then
 		
 		while currentSignal do
 			if currentSignal._waitingThread then
-				task.spawn(currentSignal._waitingThread, "Signal-: Signal was destroyed.")
+				task.spawn(currentSignal._waitingThread, "Signal-: Signal was disconnected.")
 			end
 			currentSignal:Disconnect()
 			currentSignal = currentSignal._next
