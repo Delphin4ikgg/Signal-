@@ -56,6 +56,15 @@
 
 const Wake_Waiters_On_Signal_Destroy = true
 
+local spawn = task.spawn :: typeof(task.spawn)
+local yield = coroutine.yield :: typeof(coroutine.yield)
+local resume = coroutine.resume :: typeof(coroutine.resume)
+local status = coroutine.status :: typeof(coroutine.status)
+local running = coroutine.running :: typeof(coroutine.running)
+local defer = task.defer :: typeof(task.defer)
+local create = coroutine.create :: typeof(coroutine.create)
+local tcreate = table.create :: typeof(table.create)
+
 local UNIVERSAL_MARKER = newproxy(false)
 
 local SignalClass = {}
@@ -110,9 +119,9 @@ local freeThreads: { thread } = {}
 
 local function run(fn, ...)
 	fn(...)
-	
-	local runner = coroutine.running()
-	
+
+	local runner = running()
+
 	if freeRunnerThread then
 		freeThreads[#freeThreads + 1] = runner
 	else
@@ -122,7 +131,7 @@ end
 
 local function Yield()
 	while true do
-		run(coroutine.yield())
+		run(yield())
 	end
 end
 
@@ -143,7 +152,7 @@ end
 
 function ConnectionLikeClass:Disconnect()
 	if not self.Connected then return end
-	
+
 	self.Connected = false
 	local signal = self._signal
 
@@ -155,7 +164,7 @@ function ConnectionLikeClass:Disconnect()
 
 	if signal._head == self then signal._head = next end
 	if signal._tail == self then signal._tail = prev end
-	
+
 	signal._len -= 1
 end
 
@@ -190,7 +199,7 @@ function ConnectionLikeClass:Destroy(): ()
 	self._destroyed = true
 
 	self:Disconnect()
-	
+
 	self._signal = nil
 	self._function = nil
 end
@@ -202,10 +211,10 @@ if Wake_Waiters_On_Signal_Destroy then
 		end
 
 		local currentSignal = self._head
-		
+
 		while currentSignal do
 			if currentSignal._waitingThread then
-				task.spawn(currentSignal._waitingThread, "Signal-: Signal was disconnected.")
+				spawn(currentSignal._waitingThread, "Signal-: Signal was disconnected.")
 			end
 			currentSignal:Disconnect()
 			currentSignal = currentSignal._next
@@ -232,7 +241,7 @@ if Wake_Waiters_On_Signal_Destroy then
 
 		while currentSignal do
 			if currentSignal._waitingThread then
-				task.spawn(currentSignal._waitingThread, "Signal-: Signal was destroyed.")
+				spawn(currentSignal._waitingThread, "Signal-: Signal was destroyed.")
 			end
 
 			currentSignal.Connected = false
@@ -303,22 +312,22 @@ function SignalClass:Fire(...): ()
 		if currentConnection.Connected then
 			currentThread = freeRunnerThread
 			currentFunction = currentConnection._function
-			
+
 			if currentThread then
 				freeRunnerThread = nil
 			else
 				len = #freeThreads
-				
+
 				if len > 0 then
 					currentThread = freeThreads[len]
 					freeThreads[len] = nil
 				else
-					currentThread = coroutine.create(Yield)
-					coroutine.resume(currentThread)
+					currentThread = create(Yield)
+					resume(currentThread)
 				end
 			end
-			
-			task.spawn(currentThread, currentFunction, ...)
+
+			spawn(currentThread, currentFunction, ...)
 		end
 		if currentConnection == _stopMarker then break end
 		currentConnection = currentConnection._next
@@ -332,7 +341,7 @@ function SignalClass:GetConnections(): {ConnectionLike}
 
 	local currentConnection = self._head
 
-	local returntable = table.create(self._len)
+	local returntable = tcreate(self._len)
 
 	while currentConnection do
 		if currentConnection.Connected then
@@ -347,16 +356,14 @@ end
 function SignalClass:FireDeferred(...): ()
 	if self._destroyed then 
 		error("Signal-: Signal has been destroyed!", 2)
-		return 
 	end
-
-	task.defer(self.Fire, self, ...)
+	
+	defer(self.Fire, self, ...)
 end
 
 function SignalClass:Connect(fn:(...any) -> ()): ConnectionLike
 	if self._destroyed then
 		error("Signal-: Signal has been destroyed!", 2)
-		return 
 	end
 
 	local ConnectionLike = newConnection(self, fn)
@@ -378,7 +385,6 @@ end
 function SignalClass:ConnectPriority(fn:(...any) -> ()): ConnectionLike
 	if self._destroyed then
 		error("Signal-: Signal has been destroyed!", 2)
-		return 
 	end
 
 	local ConnectionLike = newConnection(self, fn)
@@ -412,19 +418,19 @@ end
 
 function SignalClass:Wait()
 	local NewConnectionLike
-	local Coroutine = coroutine.running()
+	local Coroutine = running()
 
 	NewConnectionLike = self:Connect(function(...)
 		NewConnectionLike:Disconnect()
-		if coroutine.status(Coroutine) == "suspended" then
+		if status(Coroutine) == "suspended" then
 			NewConnectionLike._waitingThread = nil
-			task.spawn(Coroutine, ...)
+			spawn(Coroutine, ...)
 		end
 	end)
-	
+
 	NewConnectionLike._waitingThread = Coroutine
 
-	return coroutine.yield()
+	return yield()
 end
 
 local function wrap<T...>(InitialSignal:RBXScriptSignal): Signal<T...>
