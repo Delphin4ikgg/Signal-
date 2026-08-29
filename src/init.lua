@@ -140,7 +140,7 @@ end
 
 local ConnectionLikeClass = {}
 ConnectionLikeClass.__index = ConnectionLikeClass
--- An evil wizard that creates a new "carcas" for his EVIL ConnectionLike!
+
 local function newConnection<T...>(Signal:Signal<T...>, fn:(T...) -> ()): ConnectionLike
 	return setmetatable({
 		Connected = true,
