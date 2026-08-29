@@ -2,7 +2,7 @@ Signal- (aka. SignalMinus)
 Made by JDJDMNNEN aka. delphin4ik
 Thanks to BlueCritical for helping out with the type generics.
 
-Check out the Github wiki home page for the full description.
+Check out the Github wiki home page for the full description and documentation.
 
 Heavily based of LemonSignal and GoodSignal.
 
