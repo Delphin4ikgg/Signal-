@@ -8,6 +8,9 @@
 	
 	Check out the github page for the full docs and the newest version of the module!
 	
+	Github Main page: (https://github.com/Delphin4ikgg/SignalMinus)
+	Github Wiki page: (https://github.com/Delphin4ikgg/SignalMinus/wiki)
+	
 	Also thanks to LemonSignal and GoodSignal. The Signal module is heavily based off of them.
 	
 	Fires Oldest-First, Latest-Last
