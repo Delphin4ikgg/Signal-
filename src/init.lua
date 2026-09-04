@@ -4,7 +4,7 @@
 	Signal- (aka SignalMinus)
 	Developed and made by JDJDMNNEN aka delphin4ik. (Huge thanks to BlueCritical)
 	Distributed under MIT license.
-	v1.2
+	v1.3
 	
 	Check out the github page for the full docs and the newest version of the module!
 	
@@ -59,14 +59,14 @@
 
 const Wake_Waiters_On_Signal_Destroy = true
 
-local spawn = task.spawn :: typeof(task.spawn)
-local yield = coroutine.yield :: typeof(coroutine.yield)
-local resume = coroutine.resume :: typeof(coroutine.resume)
-local status = coroutine.status :: typeof(coroutine.status)
-local running = coroutine.running :: typeof(coroutine.running)
-local defer = task.defer :: typeof(task.defer)
-local create = coroutine.create :: typeof(coroutine.create)
-local tcreate = table.create :: typeof(table.create)
+local spawn 	= task.spawn :: typeof(task.spawn)
+local yield 	= coroutine.yield :: typeof(coroutine.yield)
+local resume 	= coroutine.resume :: typeof(coroutine.resume)
+local status 	= coroutine.status :: typeof(coroutine.status)
+local running 	= coroutine.running :: typeof(coroutine.running)
+local defer 	= task.defer :: typeof(task.defer)
+local create 	= coroutine.create :: typeof(coroutine.create)
+local tcreate 	= table.create :: typeof(table.create)
 
 local UNIVERSAL_MARKER = newproxy(false)
 
@@ -76,6 +76,8 @@ SignalClass.__index = SignalClass
 local function Constructor<T...>(...:T...): Signal<T...>
 	return setmetatable({_head = false, _destroyed = false, _tail = false, _rbxCon = false, _len = 0, _marker = UNIVERSAL_MARKER}, SignalClass)
 end
+
+export type SignalMinus<T...> = Signal<T...>
 
 export type Signal<Params...> = {
 	Fire: typeof(
@@ -436,9 +438,9 @@ function SignalClass:Wait()
 	return yield()
 end
 
-local function wrap<T...>(InitialSignal:RBXScriptSignal): Signal<T...>
+local function wrap<T...>(InitialSignal:RBXScriptSignal)
 	local newSignal = Constructor()
-	newSignal._rbxCon = InitialSignal:Connect(function(...) 
+	newSignal._rbxCon = InitialSignal:Connect(function(...: T...) 
 		newSignal:Fire(...)
 	end)
 	return newSignal
